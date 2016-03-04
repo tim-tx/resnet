@@ -12,8 +12,9 @@ from scipy.sparse import triu
 import time
 import logging as log
 import argparse
+import resnet
 
-parser = argparse.ArgumentParser(description='gen res net and comsol solve')
+parser = argparse.ArgumentParser(description="Generate a discrete, randomly 'porous' space and a matching resistor network. Save the edge filter for graph-tool and generate Java for COMSOL.")
 parser.add_argument('p', type=float, default=0.5, help='the desired volume fraction')
 args = parser.parse_args()
 
@@ -110,70 +111,8 @@ bonds = np.vstack([mat.row,mat.col])
 r1 = 8e-9
 r2 = 25e-9
 
-a = 4
-d = a*r1
-
-l = (r2**3-(d/a)**3)/d**2/3*2*np.pi
-
-log.info("getting initial coordinates")
-
-i = ne.evaluate('bonds % Nres')
-j = ne.evaluate('(bonds%(Nres**2) - i)/Nres').astype(type(i[0,0]))
-k = ne.evaluate('(bonds-bonds%(Nres**2))/(Nres**2)').astype(type(i[0,0]))
-
-x = ne.evaluate('sum(0.5*i,axis=0)')
-y = ne.evaluate('sum(0.5*j,axis=0)')
-z = ne.evaluate('sum(0.5*k,axis=0)')
-
-x = ne.evaluate('d*(x/(Nres-1) - 0.5)')
-y = ne.evaluate('d*(y/(Nres-1) - 0.5)')
-z = ne.evaluate('l*-z/(Nres-1)')
-
 log.info("warping lattice")
-r = np.zeros_like(y)
-theta = np.empty_like(y)
-theta.fill(np.pi)
-
-pi = np.pi
-
-mask = ne.evaluate('(arctan2(y,x) >= pi/4) & (arctan2(y,x) < 3*pi/4)')
-xm = x[mask]
-ym = y[mask]
-r[mask] = ne.evaluate('2*ym/sqrt(pi)')
-mask = ne.evaluate('mask & (y != 0)')
-theta[mask] = ne.evaluate('pi/2*(1-xm/ym/2)')
-
-mask = ne.evaluate('(arctan2(y,x) >= 3*pi/4) | (arctan2(y,x) < -3*pi/4)')
-xm = x[mask]
-ym = y[mask]
-r[mask] = ne.evaluate('2*-xm/sqrt(pi)')
-mask = ne.evaluate('mask & (x != 0)')
-theta[mask] = ne.evaluate('pi*(1+ym/xm/4)')
-
-mask = ne.evaluate('(arctan2(y,x) >= -3*pi/4) & (arctan2(y,x) < -pi/4)')
-xm = x[mask]
-ym = y[mask]
-r[mask] = ne.evaluate('2*-ym/sqrt(pi)')
-mask = ne.evaluate('mask & (y != 0)')
-theta[mask] = ne.evaluate('pi/2*(3-xm/ym/2)')
-
-mask = ne.evaluate('(arctan2(y,x) >= -pi/4) & (arctan2(y,x) < pi/4)')
-xm = x[mask]
-ym = y[mask]
-r[mask] = ne.evaluate('2*xm/sqrt(pi)')
-mask = ne.evaluate('mask & (x != 0)')
-xm = x[mask]
-ym = y[mask]
-theta[mask] = ne.evaluate('pi*(2+ym/xm/4)')
-
-phi = theta.copy()
-
-rho = ne.evaluate('((d/a)**3-z*d*d*3/2/pi)**(1/3)')
-theta = ne.evaluate('pi*(1-r*sqrt(pi)/d/2)')
-
-x = ne.evaluate('rho*sin(theta)*cos(phi)')
-y = ne.evaluate('rho*sin(theta)*sin(phi)')
-z = ne.evaluate('rho*cos(theta)')
+x,y,z = resnet.bonds_to_xyz(bonds,Nres,r1,r2)
 
 # fit lattice into space of 'physical matrix' indices
 x = ne.evaluate('(x/r2/2+0.5)*(Nphys-1)')

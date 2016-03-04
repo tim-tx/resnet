@@ -7,31 +7,22 @@ from numpy.random import binomial
 import logging as log
 import petsc4py
 import sys
-petsc4py.init(sys.argv)
+#petsc4py.init(sys.argv)
 from petsc4py import PETSc
 import argparse
 
-parser = argparse.ArgumentParser(description='resistor network solver')
-parser.add_argument('edge', type=int, default=100, help='number of resistors on an edge')
+import resnet
+
+parser = argparse.ArgumentParser(description='Cubic resistor lattice solver using PETSc. Specify either an npy file for the graph edge filter or generate one randomly for the specified bond probability.')
+parser.add_argument('N', type=int, default=100, help='number of lattice sites on an edge, needs to be specified if loading a filter or generating one')
+parser.add_argument('--gm', type=float, default=1.0, help='bond conductance')
+
+group = parser.add_mutually_exclusive_group(required=True)
+group.add_argument('--maskfile',type=str)
+group.add_argument('-p','--probability',type=float,metavar='P',help='probability of placing a bond')
 args = parser.parse_args()
 
-N = args.edge
-
 log.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", level=log.INFO)
-
-def csr_row_set_nz_to_val(csr, row, value=0):
-    """Set all nonzero elements (elements currently in the sparsity pattern)
-    to the given value. Useful to set to 0 mostly.
-    """
-    if not isinstance(csr, scipy.sparse.csr_matrix):
-        raise ValueError('Matrix given must be of CSR format.')
-    csr.data[csr.indptr[row]:csr.indptr[row+1]] = value
-
-def csr_rows_set_nz_to_val(csr, rows, value=0):
-    for row in rows:
-        csr_row_set_nz_to_val(csr, row)
-    if value == 0:
-        csr.eliminate_zeros()
 
 class MyVisitor(gt.DFSVisitor):
     def __init__(self,visited):
@@ -40,25 +31,32 @@ class MyVisitor(gt.DFSVisitor):
     def discover_vertex(self,u):
         self.visited.add(int(u))
 
-Lx = N+1
-Ly = N+1
-Lz = N+1
+Lx = args.N
+Ly = Lz = Lx
 
 l = Lx*Ly*Lz
 
 rm = 1.0
-gm = 0.5
+gm = args.gm
 
 num_bonds = (Lx-1)*Ly*Lz + Lx*(Ly-1)*Lz + Lx*Ly*(Lz-1)
-
-p = 0.5
 
 log.info("generating graph")
 g = gt.lattice([Lx,Ly,Lz])
 
 assert(g.num_edges() == num_bonds)
 
-prop = g.new_edge_property('bool',vals=binomial(1,p,num_bonds).astype('bool'))
+p = args.prob
+
+if args.maskfile:
+    log.info("loading %s" % args.maskfile)
+    mask = np.load(args.maskfile)
+    p = np.sum(mask)/mask.shape[0]
+    vals = mask
+else:
+    vals = binomial(1,p,num_bonds).astype('bool')
+
+prop = g.new_edge_property('bool',vals=vals)
 g.set_edge_filter(prop)
 
 num_vert = g.num_vertices()
@@ -66,19 +64,22 @@ g.add_vertex(2)
 g.add_edge_list([[num_vert,n] for n in range(Lx*Ly)])
 g.add_edge_list([[num_vert+1,n] for n in range(l-Lx*Ly,l)])
 
-log.info("searching")
+log.info("checking for percolation")
 vcc_path = set()
 gt.dfs_search(g,num_vert,visitor=MyVisitor(vcc_path))
 
-print(num_vert+1 in vcc_path)
+if not num_vert+1 in vcc_path:
+    log.warn("not percolating")
+else:
+    vcc_path.remove(num_vert+1)
 
 vcc_path.remove(num_vert)
-vcc_path.remove(num_vert+1)
+
 
 g.remove_vertex(num_vert+1)
 g.remove_vertex(num_vert)
 
-plane = [i for i in range(Lx*Ly,2*Lx*Ly+1) if i in g.vertex(i-Lx*Ly).all_neighbours()]
+plane = [i for i in range(Lx*Ly,2*Lx*Ly+1) if i in g.vertex(i-Lx*Ly).all_neighbours() and i in vcc_path]
 
 top = range(Lx*Ly)
 bot = range(l-Lx*Ly,l)
@@ -89,7 +90,7 @@ fixed = set(range(l))-others
 adj = gt.adjacency(g)
 del g
 
-csr_rows_set_nz_to_val(adj,fixed)
+resnet.csr_rows_set_nz_to_val(adj,fixed) # nodes not in vcc_path or those on the top/bottom
 
 diag = adj.sum(axis=1)
 
@@ -114,7 +115,7 @@ del adj
     
 b.setValuesBlocked(range(Lx*Ly),[1.0]*Lx*Ly)
 
-# i don't know if this does anything
+# i don't know if this actually frees memory
 #del g
 
 log.info("assembling")
@@ -123,7 +124,9 @@ A.assemblyEnd()
 
 ksp = PETSc.KSP().create()
 ksp.setOperators(A)
-#ksp.setType('preonly')
+
+# uncomment if you want direct LU instead of iterative
+# ksp.setType('preonly')
 # pc=ksp.getPC()
 # pc.setType('lu')
 # pc.setFactorSolverPackage('mumps')
@@ -136,5 +139,5 @@ log.info("converged in %d iterations" % ksp.getIterationNumber())
 V = x.array
 Itot = np.sum([(1.0-V[i])*gm for i in plane])
 log.info("total current %f" % Itot)
-emt = (1.-(1.-p)*3./2.)/N*(N+1)**2
+emt = (1.-(1.-p)*3./2.)/(args.N-1)*(args.N)**2
 log.info("emt prediction %f" % emt)
