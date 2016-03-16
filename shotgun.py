@@ -16,6 +16,7 @@ import resnet
 
 parser = argparse.ArgumentParser(description="Generate a discrete, randomly 'porous' space and a matching resistor network. Save the edge filter for graph-tool and generate Java for COMSOL.")
 parser.add_argument('p', type=float, default=0.5, help='the desired volume fraction')
+parser.add_argument('N', type=int, default=100, help='the number of lattice sites on an edge for the resistor network')
 args = parser.parse_args()
 
 log.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", level=log.INFO)
@@ -23,7 +24,7 @@ log.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", level=log.INFO)
 st = time.time()
 
 Nphys = 25 # number of cubes on an edge in physical space
-Nres = 21 # number of lattice sites on an edge
+Nres = args.N # number of lattice sites on an edge
 M = 2 # edge length (w.r.t. Nphys) of cubes to be removed, total vol removed is M**3
 p = args.p # volume fraction
 tol = 1e-3 # desired tolerance on volume fraction for generation
@@ -114,6 +115,9 @@ r2 = 25e-9
 log.info("warping lattice")
 x,y,z = resnet.bonds_to_xyz(bonds,Nres,r1,r2)
 
+# coordinates inside a certain radius
+# inner = np.argwhere(np.sqrt(x**2 + y**2 + z**2) < (r1 + 0.2*(r2-r1))).flatten()
+
 # fit lattice into space of 'physical matrix' indices
 x = ne.evaluate('(x/r2/2+0.5)*(Nphys-1)')
 y = ne.evaluate('(y/r2/2+0.5)*(Nphys-1)')
@@ -127,7 +131,12 @@ z = np.round(z).astype(np.int64)
 #prop = g.new_edge_property('bool',vals=flags[x,y,z])
 #g.set_edge_filter(prop)
 #g.save('graph_'+time.strftime("%y%m%d_%H%M%S")+'.gt',fmt='gt')
-np.save('mask_'+time.strftime("%y%m%d_%H%M%S"),flags[x,y,z])
+resmask = flags[x,y,z]
+np.save('mask_'+time.strftime("%y%m%d_%H%M%S"),resmask)
+
+#vf_inner = np.sum(resmask[inner])/resmask[inner].shape[0]
+vf_full = np.sum(resmask)/resmask.shape[0]
+log.info("lattice volume fraction = %f" % vf_full)
 
 log.info("total time %f sec" % (time.time()-st))
 
