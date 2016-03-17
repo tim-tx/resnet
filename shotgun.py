@@ -1,10 +1,5 @@
 #!/usr/bin/env python
 
-# In this file we generate the cubes of both materials.
-# The intention is that the inclusion cubes will not be trimmed by a smooth hemisphere  everything stays discrete or "voxelated."
-
-# change the big blocks to small blocks, so there is no overhang
-
 import numpy as np
 import numexpr as ne
 import graph_tool.all as gt
