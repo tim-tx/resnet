@@ -127,7 +127,9 @@ z = np.round(z).astype(np.int64)
 #g.set_edge_filter(prop)
 #g.save('graph_'+time.strftime("%y%m%d_%H%M%S")+'.gt',fmt='gt')
 resmask = flags[x,y,z]
-np.save('mask_'+time.strftime("%y%m%d_%H%M%S"),resmask)
+stamp = time.strftime("%y%m%d_%H%M%S")
+np.save('mask_'+stamp,resmask)
+np.save('flags_'+stamp,flags)
 
 #vf_inner = np.sum(resmask[inner])/resmask[inner].shape[0]
 vf_full = np.sum(resmask)/resmask.shape[0]
