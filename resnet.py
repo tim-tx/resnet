@@ -1,6 +1,83 @@
 import scipy.sparse
 import numexpr as ne
 import numpy as np
+import logging as log
+
+def _gen_flags(fac,N,M,p):
+    '''Generate a 1D array of booleans with random values'''
+    gen_p = np.clip(fac*p/M**3,0.,1.) # not sure if clipping here would confuse newton's method
+    flags = np.random.binomial(1,gen_p,size=N**3).astype('bool')
+    return flags
+
+def _flags_fill(flags,N,M):
+    '''Expand a cube of True around singleton True values in flags array'''
+    idx = np.argwhere(flags == True)
+    max_idx = N**3 - 1
+    last = flags[max_idx]
+
+    # find where there is room for expansion in each direction
+    i = np.where(idx % N < N-1)[0]
+    j = np.where(idx % (N**2) < (N-1)*N)[0]
+    k = np.where(idx % (N**3) < (N-1)*N**2)[0]
+
+    # find room for expansion in multiple directions
+    ij = np.intersect1d(i,j)
+    ik = np.intersect1d(i,k)
+    jk = np.intersect1d(j,k)
+    ijk = np.intersect1d(ij,k)
+
+    # this is hardcoded for M=2 right now
+    flags[np.clip(idx[i]+1,0,max_idx)] = True # i+1
+    flags[np.clip(idx[j]+N,0,max_idx)] = True # j+1
+    flags[np.clip(idx[k]+N**2,0,max_idx)] = True # k+1
+    flags[np.clip(idx[ij]+1+N,0,max_idx)] = True # i+1, j+1
+    flags[np.clip(idx[ik]+1+N**2,0,max_idx)] = True # i+1, k+1
+    flags[np.clip(idx[jk]+N*(N+1),0,max_idx)] = True # j+1, k+1
+    flags[np.clip(idx[ijk]+1+N*(N+1),0,max_idx)] = True # i+1, j+1, k+1
+
+    # needed?
+    flags[max_idx] = last
+
+    return flags
+
+def _init_newton(N,M,p):
+    '''First steps for a Newton's method iteration'''
+    fac1 = 1.0 # initialize scaling factor on p to get the desired volume fraction (overlap of bodies removed requires this)
+    fac2 = 1.01
+
+    flags = _flags_fill(_gen_flags(fac1,N,M,p),N,M)
+    ratio1 = np.sum(flags)/N**3
+    flags = _flags_fill(_gen_flags(fac2,N,M,p),N,M)
+    ratio2 = np.sum(flags)/N**3
+
+    deriv = ((p-ratio1) - (p-ratio2))/(fac1-fac2)
+    fac = fac2
+    ratio = ratio2
+    return fac2,ratio2,deriv
+
+def discrete_pore_space(N,M,p,tol):
+    """Generate a 3D grid, N x N x N points, remove cubes of size M x M x M. Newton's method is used to get the volume fraction of the space equal to p within tolerance tol."""
+
+    fac,ratio,deriv = _init_newton(N,M,p)
+    count = 1
+    while(np.abs(p-ratio) > tol):
+        if deriv == 0:
+            fac,ratio,deriv = _init_newton(N,M,p)
+            count += 1
+        fac_old = fac
+        fac = fac - (p-ratio)/deriv
+        flags_u = _gen_flags(fac,N,M,p)
+        flags = _flags_fill(flags_u.copy(),N,M)
+        ratio_old = ratio
+        ratio = np.sum(flags)/N**3
+        deriv = ((p-ratio_old) - (p-ratio))/(fac_old-fac)
+        count += 1
+
+    log.info("generated space in %d iterations" % count)
+    log.info("volume fraction = %f" % ratio)
+    flags = flags.reshape(N,N,N)
+    return flags
+
 
 def csr_row_set_nz_to_val(csr, row, value=0):
     """Set all nonzero elements (elements currently in the sparsity pattern)

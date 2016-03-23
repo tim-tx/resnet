@@ -26,75 +26,9 @@ tol = 1e-3 # desired tolerance on volume fraction for generation
 
 log.info("Nphys = %d, Nres = %d, M = %d, p = %f" % (Nphys,Nres,M,p))
 
-def gen_flags(fac):
-    '''Generate a 1D array of booleans with random values'''
-    gen_p = np.clip(fac*p/M**3,0.,1.) # not sure if clipping here would confuse newton's method
-    flags = np.random.binomial(1,gen_p,size=Nphys**3).astype('bool')
-    return flags
-
-def flags_fill(flags):
-    '''Expand a cube of True around singleton True values in flags array'''
-    idx = np.argwhere(flags == True)
-    max_idx = Nphys**3 - 1
-    last = flags[max_idx]
-
-    # find where there is room for expansion in each direction
-    i = np.where(idx % Nphys < Nphys-1)[0]
-    j = np.where(idx % (Nphys**2) < (Nphys-1)*Nphys)[0]
-    k = np.where(idx % (Nphys**3) < (Nphys-1)*Nphys**2)[0]
-
-    # find room for expansion in multiple directions
-    ij = np.intersect1d(i,j)
-    ik = np.intersect1d(i,k)
-    jk = np.intersect1d(j,k)
-    ijk = np.intersect1d(ij,k)
-
-    flags[np.clip(idx[i]+1,0,max_idx)] = True # i+1
-    flags[np.clip(idx[j]+Nphys,0,max_idx)] = True # j+1
-    flags[np.clip(idx[k]+Nphys**2,0,max_idx)] = True # k+1
-    flags[np.clip(idx[ij]+1+Nphys,0,max_idx)] = True # i+1, j+1
-    flags[np.clip(idx[ik]+1+Nphys**2,0,max_idx)] = True # i+1, k+1
-    flags[np.clip(idx[jk]+Nphys*(Nphys+1),0,max_idx)] = True # j+1, k+1
-    flags[np.clip(idx[ijk]+1+Nphys*(Nphys+1),0,max_idx)] = True # i+1, j+1, k+1
-
-    # needed?
-    flags[max_idx] = last
-
-    return flags
-
-
-def init_newton():
-    '''First steps for a Newton's method iteration'''
-    fac1 = 1.0 # initialize scaling factor on p to get the desired volume fraction (overlap of bodies removed requires this)
-    fac2 = 1.01
-
-    flags = flags_fill(gen_flags(fac1))
-    ratio1 = np.sum(flags)/Nphys**3
-    log.info("volume fraction = %f" % ratio1)
-    flags = flags_fill(gen_flags(fac2))
-    ratio2 = np.sum(flags)/Nphys**3
-    log.info("volume fraction = %f" % ratio2)
-
-    deriv = ((p-ratio1) - (p-ratio2))/(fac1-fac2)
-    fac = fac2
-    ratio = ratio2
-    return fac2,ratio2,deriv
+flags = resnet.discrete_pore_space(Nphys,M,p,tol)
 
 # generate a matrix with True volume fraction close to desired value
-fac,ratio,deriv = init_newton()
-while(np.abs(p-ratio) > tol):
-    if deriv == 0:
-        fac,ratio,deriv = init_newton()
-    fac_old = fac
-    fac = fac - (p-ratio)/deriv
-    flags_u = gen_flags(fac)
-    flags = flags_fill(flags_u.copy())
-    ratio_old = ratio
-    ratio = np.sum(flags)/Nphys**3
-    deriv = ((p-ratio_old) - (p-ratio))/(fac_old-fac)
-    log.info("volume fraction = %f" % ratio)
-
-flags = flags.reshape(Nphys,Nphys,Nphys)
 
 log.info("generating lattice")
 
