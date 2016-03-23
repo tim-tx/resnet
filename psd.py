@@ -26,9 +26,10 @@ log.info("Nphys = %d, M = %d, p = %f" % (Nphys,M,p))
 
 flags = resnet.discrete_pore_space(Nphys,M,p,tol)
 
-space_edge = 50
+space_edge = 50.0
 side = space_edge / Nphys
 r = side / np.sqrt(np.pi)
+r = side / 2
 
 # walls
 centers = (np.argwhere(flags) + 0.5) / Nphys * space_edge
@@ -36,14 +37,15 @@ centers = (np.argwhere(flags) + 0.5) / Nphys * space_edge
 ps = []
 C = []
 P = []
+results = []
 
 log.info("calculating pore size distribution")
 
 def gen_p():
     return np.random.rand(3) * space_edge
 def bubble_radius(c,sign=-1.0):
-    # if np.isnan(c).any():
-    #     return 0.0
+    if np.isnan(c).any():
+        return 0.0
     s =  cdist(centers,c[None,...])
     ret = sign*(np.min(s) - r)
     return ret
@@ -51,13 +53,21 @@ def bubble_radius(c,sign=-1.0):
 
 for i in range(100):
     P.append(gen_p())
-    while( (cdist(P[-1][None,...],centers) <= r*1.3).any() ):
-        P[-1] = gen_p()
+    while True:
+        while( (cdist(P[-1][None,...],centers) <= r*np.sqrt(2)*1.01).any() ):
+            P[-1] = gen_p()
 
-    cons = ({'type': 'ineq',
-             'fun' : lambda x: np.array(bubble_radius(x,sign=1.0) - np.sqrt(np.sum((P[-1]-x)**2))) })
-    bounds = ((0,space_edge),)*3
-    res = minimize(bubble_radius, P[-1], method='SLSQP', constraints=cons, bounds=bounds, options={'disp':False})
+        cons = ({'type': 'ineq',
+                 'fun' : lambda x: np.array(bubble_radius(x,sign=1.0) - np.sqrt(np.sum((P[-1]-x)**2))) })
+        bounds = ((0,space_edge),)*3
+        res = minimize(bubble_radius, P[-1], method='SLSQP', constraints=cons, bounds=bounds, options={'disp':False})
+
+        if res.success and not np.isnan(res.x).any():
+            results.append(res)
+            break
+        else:
+            P[-1] = gen_p()
+            log.warning("maximization failed")
 
     ps.append(res.fun)
     C.append(res.x)
@@ -74,30 +84,9 @@ PSD = -np.gradient(cuml,step)
 
 #plt.plot(samples,cuml)
 #plt.bar(samples,PSD,step)
-plt.plot(samples,PSD*10)
+plt.plot(samples,PSD*10,label=("p = %.2f" % p))
 #plt.hist(ps,20)
 plt.xlabel('pore radius')
 plt.ylabel('probability density')
+plt.legend()
 plt.show()
-
-lines = '''# vtk DataFile Version 2.0
-Unstructured grid legacy vtk file with point scalar data
-ASCII
-
-DATASET UNSTRUCTURED_GRID
-'''
-lines += "POINTS %d double\n" % centers.shape[0]
-
-for cen in centers:
-    lines += "%f %f %f\n" % tuple(cen)
-
-lines += 'POINT_DATA %d\n' % centers.shape[0]
-lines += '''SCALARS radii double
-LOOKUP_TABLE default
-'''
-for cen in centers:
-    lines += "%f\n" % r
-
-f = open('test.vtk','w')
-f.writelines(lines)
-f.close()
