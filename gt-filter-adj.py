@@ -46,7 +46,7 @@ g = gt.lattice([Lx,Ly,Lz])
 
 assert(g.num_edges() == num_bonds)
 
-p = args.prob
+p = args.probability
 
 if args.maskfile:
     log.info("loading %s" % args.maskfile)
@@ -138,6 +138,7 @@ log.info("converged in %d iterations" % ksp.getIterationNumber())
 
 V = x.array
 Itot = np.sum([(1.0-V[i])*gm for i in plane])
-log.info("total current %f" % Itot)
-emt = (1.-(1.-p)*3./2.)/(args.N-1)*(args.N)**2
-log.info("emt prediction %f" % emt)
+log.info("total current %e" % Itot)
+#emt = gm*(1.-(1.-p)*3./2.)/(args.N-1)*(args.N)**2
+emt = 0.125*(-2*gm+6*gm*p+np.sqrt(gm**2*(-2+6*p)**2))/(args.N-1)*args.N**2
+log.info("emt prediction %e" % emt)
