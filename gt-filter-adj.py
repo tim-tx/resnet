@@ -37,7 +37,9 @@ Ly = Lz = Lx
 l = Lx*Ly*Lz
 
 rm = 1.0
-gm = args.gm
+#gm = args.gm
+#gm = 1.0 + 1j
+gm = (1e-3+1j*2*np.pi*3.1e9*4.4*8.854e-12)*2*np.pi/(1/1e-8-1/25e-9)
 
 num_bonds = (Lx-1)*Ly*Lz + Lx*(Ly-1)*Lz + Lx*Ly*(Lz-1)
 
@@ -92,7 +94,7 @@ del g
 
 resnet.csr_rows_set_nz_to_val(adj,fixed) # nodes not in vcc_path or those on the top/bottom
 
-diag = adj.sum(axis=1)
+diag = np.array(adj.sum(axis=1)).flatten()
 
 log.info("creating PETSc structures")
 b = PETSc.Vec().createSeq(l)
@@ -138,7 +140,9 @@ log.info("converged in %d iterations" % ksp.getIterationNumber())
 
 V = x.array
 Itot = np.sum([(1.0-V[i])*gm for i in plane])
-log.info("total current %e" % Itot)
+#log.info("total current %e" % Itot)
+log.info('total current ({0:.4e} {1} {2:.4e}i)'.format(Itot.real, '+-'[Itot.imag < 0], abs(Itot.imag)))
 #emt = gm*(1.-(1.-p)*3./2.)/(args.N-1)*(args.N)**2
 emt = 0.125*(-2*gm+6*gm*p+np.sqrt(gm**2*(-2+6*p)**2))/(args.N-1)*args.N**2
-log.info("emt prediction %e" % emt)
+log.info('emt prediction ({0:.4e} {1} {2:.4e}i)'.format(emt.real, '+-'[emt.imag < 0], abs(emt.imag)))
+#log.info("emt prediction %e" % emt)

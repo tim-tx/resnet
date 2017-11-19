@@ -82,7 +82,7 @@ sizes = np.array([2*r2/Nphys,r2/Nphys])
 
 loc = np.argwhere(flags == True).astype(np.float)
 loc[:,:2] = (loc[:,:2]-0.5*(Nphys-1))/(0.5*Nphys)*r2
-loc[:,2] = (loc[:,2]+0.5)/Nphys*r2
+loc[:,2] = (loc[:,2]+0.5)/Nphys*r2 * -1 + 25
 # remove the stuff that's outside r1 and r2
 loc = loc[ np.sqrt(loc[:,0]**2+loc[:,1]**2+loc[:,2]**2) < r2 ]
 loc = loc[ np.sqrt(loc[:,0]**2+loc[:,1]**2+loc[:,2]**2) > r1 ]
@@ -109,7 +109,7 @@ sizes = np.array([2*r2/Nphys,r2/Nphys])
 
 loc = np.argwhere(flags == False).astype(np.float)
 loc[:,:2] = (loc[:,:2]-0.5*(Nphys-1))/(0.5*Nphys)*r2
-loc[:,2] = (loc[:,2]+0.5)/Nphys*r2
+loc[:,2] = (loc[:,2]+0.5)/Nphys*r2 * -1 + 25
 # remove the stuff that's outside r1 and r2
 loc = loc[ np.sqrt(loc[:,0]**2+loc[:,1]**2+loc[:,2]**2) < r2 ]
 loc = loc[ np.sqrt(loc[:,0]**2+loc[:,1]**2+loc[:,2]**2) > r1 ]
